@@ -1,0 +1,167 @@
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+from tensorflow import keras
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+import time
+
+# Data provided in the table
+data = '''
+State	2016	2017	2018	2019	2020	2021	2022
+Alabama	135	2,904	14,100	19,238	20,185	23,510	20,054
+Arizona	2,770	12,329	22,706	24,529	29,535	33,075	39,423
+Arkansas	26	134	598	991	3,090	7,384	9,432
+California	140,452	152,748	156,898	213,455	285,532	341,876	375,913
+Colorado	1,324	7,105	14,149	17,620	13,889	11,576	20,930
+Connecticut	4,210	6,742	6,421	5,457	9,341	16,172	20,171
+Delaware	281	891	1,644	1,620	2,478	3,941	3,088
+District of Columbia	454	763	955	1,487	2,632	4,685	6,959
+Florida	37,060	60,706	65,781	60,313	130,362	240,608	263,119
+Georgia	13,249	22,071	24,632	23,718	23,427	20,551	33,129
+Idaho	419	368	419	554	2,319	4,763	2,264
+Illinois	17,079	25,310	24,088	19,969	25,007	28,454	24,610
+Indiana	1,623	6,947	13,708	7,772	7,806	13,376	14,499
+Iowa	2,005	3,016	2,483	2,842	3,649	6,951	4,891
+Kansas	762	1,737	2,406	1,995	2,644	3,970	6,525
+Kentucky	1,068	3,282	7,952	6,832	5,568	4,765	2,713
+Louisiana	849	12,233	20,430	18,980	26,342	33,999	33,770
+Maine	135	591	703	636	281	243	109
+Maryland	7,542	12,341	11,019	12,462	24,351	32,153	37,379
+Massachusetts	5,200	9,046	9,427	9,349	11,101	11,464	6,281
+Michigan	16,652	27,469	24,325	20,360	15,763	23,678	28,975
+Minnesota	2,567	10,434	20,227	29,607	39,193	42,753	38,354
+Mississippi	402	1,037	2,539	1,984	2,019	3,441	3,483
+Missouri	3,758	7,386	8,785	9,133	10,372	15,662	19,841
+Montana	62	133	152	157	2,450	9,316	14,072
+Nebraska	5,811	6,203	5,850	4,645	2,493	2,301	1,478
+Nevada	1,357	2,504	2,663	3,001	2,442	4,253	4,286
+New Hampshire	315	2,036	2,511	2,219	1,496	1,128	508
+New Jersey	7,953	14,110	14,990	13,018	18,590	25,093	42,244
+New Mexico	153	1,140	2,112	1,616	1,436	2,344	1,413
+New York	20,097	36,986	38,050	42,967	48,805	55,470	94,765
+North Carolina	6,147	34,108	56,262	45,999	48,633	65,750	72,167
+North Dakota	3	4	19	17	399	1,529	1,288
+Ohio	11,331	13,656	17,659	13,235	17,240	14,230	25,746
+Oklahoma	570	9,758	20,488	20,483	13,590	9,194	8,969
+Oregon	1,026	6,175	22,520	41,198	34,452	38,231	30,127
+Pennsylvania	21,232	26,905	22,230	20,100	43,189	71,520	80,839
+Rhode Island	1,409	2,865	3,259	2,976	2,387	2,425	1,601
+South Carolina	3,015	28,333	56,358	58,997	62,789	79,651	84,880
+South Dakota	8	12	13	27	160	32	37
+Tennessee	1,688	11,017	24,474	21,135	28,463	39,231	38,910
+Texas	49,769	85,588	84,111	78,718	73,488	101,830	95,509
+Utah	968	4,652	11,187	24,761	16,192	19,621	17,439
+Vermont	17	155	188	225	186	117	38
+Virginia	6,493	20,743	27,043	25,714	44,803	67,768	99,311
+Washington	9,315	18,497	18,984	14,718	13,211	16,093	15,416
+West Virginia	429	700	671	473	1,171	3,802	5,344
+Wisconsin	1,562	4,111	5,039	6,889	3,933	3,030	8,078
+Wyoming	69	112	198	112	29	744	2,075
+'''
+# Convert the data to a DataFrame
+data_list = [line.split('\t') for line in data.strip().split('\n')]
+columns = data_list[0]
+df = pd.DataFrame(data_list[1:], columns=columns)
+
+# Convert numeric columns to integers (remove commas and convert to int)
+for col in columns[1:]:
+    df[col] = df[col].str.replace(',', '').astype(int)
+
+# Set the 'State' column as the index
+df.set_index('State', inplace=True)
+
+# Remove leading/trailing spaces from column names and also remove non-alphanumeric characters
+df.columns = df.columns.str.strip().str.replace('[^a-zA-Z0-9]', '')
+
+# Display the DataFrame
+print(df)
+
+# Prepare the training data (X: 2016 to 2022, y: 2016 to 2022)
+X_train = df.loc[:, '2016':'2021'].values
+y_train = df.loc[:, '2016':'2021'].values
+
+# Standardize the data
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+
+# Build the neural network model
+model = keras.Sequential([
+    keras.layers.Dense(128, activation='relu', input_shape=(6,)),  # 7 features (2016 to 2022)
+    keras.layers.Dense(64, activation='relu'),
+    keras.layers.Dense(32, activation='relu'),
+    # Use 'linear' activation to allow positive integer predictions
+    keras.layers.Dense(6, activation='linear')  # 7 outputs for 2016 to 2022
+])
+
+# Add custom constraint to ensure predictions are positive
+class PositiveConstraint(tf.keras.constraints.Constraint):
+    def __call__(self, w):
+        return tf.keras.backend.relu(w)
+
+for layer in model.layers:
+    for weight in layer.weights:
+        if 'kernel' in weight.name:
+            weight.assign(PositiveConstraint()(weight))
+
+# Compile the model
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+# Train the model until the error is within 10% of the real data values
+target_error = 0.1
+current_error = float('inf')
+epochs = 0
+
+# Start the time counter
+start_time = time.time()
+
+#max_epochs = 100  # Set a maximum number of epochs
+
+#while current_error > target_error and epochs < max_epochs:
+while current_error > target_error:   
+    # Train the model for one epoch
+    model.fit(X_train_scaled, y_train, epochs=10, batch_size=16, verbose=1)
+    
+    # Predict the number of accidents for 2016 to 2022 based on the trained model
+    predictions = model.predict(X_train_scaled)
+    
+    # Calculate the mean squared error
+    current_error = np.mean(((y_train - predictions) / y_train)**2)  # Calculate error as a percentage
+
+    # Display the current error
+    print(f"Epoch {epochs + 1}, Mean Squared Error (Percentage): {current_error:.6f}")
+
+    epochs += 1
+
+# Stop the time counter
+end_time = time.time()
+
+# Display the training time
+training_time = end_time - start_time
+print(f"Training time: {training_time:.2f} seconds")
+
+# Display the predicted number of accidents for 2016 to 2022
+predicted_df = pd.DataFrame(predictions, index=df.index, columns=['Predicted_2016', 'Predicted_2017', 'Predicted_2018', 'Predicted_2019', 'Predicted_2020', 'Predicted_2021'])
+print(predicted_df)
+
+# Extrapolate the predictions for 2023, 2024, and 2025
+last_year_prediction = predictions[:, -1]  # Get the prediction for 2022
+growth_rate = (last_year_prediction - predictions[:, -2]) / last_year_prediction
+extrapolated_predictions = []
+
+for year in range(2022, 2026):
+    # Extrapolate the predictions using the growth rate
+    prediction = last_year_prediction + growth_rate * (last_year_prediction - predictions[:, -2])
+    extrapolated_predictions.append(prediction)
+    last_year_prediction = prediction
+
+# Transpose the list of extrapolated predictions
+extrapolated_predictions_transposed = list(map(list, zip(*extrapolated_predictions)))
+
+# Create a DataFrame for the extrapolated predictions
+extrapolated_df = pd.DataFrame(extrapolated_predictions_transposed, index=df.index, columns=[f'Predicted_{year}' for year in range(2022, 2026)])
+
+# Round up all the predictions in the DataFrame and convert them to integers
+extrapolated_df = np.ceil(extrapolated_df).astype(int)
+
+print(extrapolated_df)
